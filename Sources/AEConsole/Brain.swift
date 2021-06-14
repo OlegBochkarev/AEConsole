@@ -11,7 +11,7 @@ internal final class Brain: NSObject {
     
     // MARK: - Outlets
     
-    internal var console: View!
+    internal var console: View?
     
     // MARK: - Properties
     
@@ -21,6 +21,9 @@ internal final class Brain: NSObject {
     internal var filteredLines = [CustomStringConvertible]()
     
     internal var contentWidth: CGFloat = 0.0
+    
+    private var logFolderPath: URL!
+    private let logDateFormatter: DateFormatter = DateFormatter()
     
     internal var filterText: String? {
         didSet {
@@ -39,16 +42,34 @@ internal final class Brain: NSObject {
 
     internal init(with settings: Settings) {
         self.settings = settings
+        
+        logDateFormatter.dateFormat = "dd_MM_yyyy_HH:mm:ss"
+        logDateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        
+        let paths = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)
+        let documentsDirectory = paths[0]
+        let docURL = URL(string: documentsDirectory)!
+        logFolderPath = docURL.appendingPathComponent("Logs")
+        
+        if !FileManager.default.fileExists(atPath: logFolderPath.absoluteString) {
+            try? FileManager.default.createDirectory(atPath: logFolderPath.absoluteString,
+                                                     withIntermediateDirectories: true,
+                                                     attributes: nil)
+        }
     }
     
     // MARK: - API
 
     internal func configureConsole(in window: UIWindow?) {
         guard let window = window else { return }
+        if console != nil {
+            console?.removeFromSuperview()
+            console = nil
+        }
         console = createConsoleView(in: window)
-        console.tableView.dataSource = self
-        console.tableView.delegate = self
-        console.textField.delegate = self
+        console?.tableView.dataSource = self
+        console?.tableView.delegate = self
+        console?.textField.delegate = self
     }
     
     internal func addLogLine(_ line: CustomStringConvertible) {
@@ -80,7 +101,7 @@ internal final class Brain: NSObject {
             }
         }
     }
-
+    
     private func writeLogFile() throws -> URL {
         let stringLines = lines.map({ $0.description })
         let log = stringLines.joined(separator: "\n")
@@ -92,7 +113,10 @@ internal final class Brain: NSObject {
             do {
                 let fileURL = logFileURL
                 try log.write(to: fileURL, atomically: true, encoding: String.Encoding.utf8)
-                aelog("Log is exported to path: \(fileURL)")
+                aelog("Log is exported")
+                DispatchQueue.main.async {[weak self] in
+                    self?.clearLog()
+                }
                 return fileURL
             } catch {
                 aelog("Log exporting failed with error: \(error)")
@@ -102,12 +126,33 @@ internal final class Brain: NSObject {
     }
 
     private var logFileURL: URL {
-        let filename = "AELog_\(Date().timeIntervalSince1970).txt"
-        let documentsPath = NSSearchPathForDirectoriesInDomains(
-            .documentDirectory, .userDomainMask, true)[0]
-        let documentsURL = URL(fileURLWithPath: documentsPath)
+        let filename = "\(logDateFormatter.string(from: Date())).txt"
+        let documentsURL = URL(fileURLWithPath: logFolderPath.absoluteString, isDirectory: true)
         let fileURL = documentsURL.appendingPathComponent(filename)
         return fileURL
+    }
+    
+    func mach_task_self() -> task_t {
+        return mach_task_self_
+    }
+      
+    func getMegabytesUsed() -> Float? {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout.size(ofValue: info) / MemoryLayout<integer_t>.size)
+        let kerr = withUnsafeMutablePointer(to: &info) { infoPtr in
+            return infoPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { (machPtr: UnsafeMutablePointer<integer_t>) in
+                return task_info(
+                    mach_task_self(),
+                    task_flavor_t(MACH_TASK_BASIC_INFO),
+                    machPtr,
+                    &count
+                )
+            }
+        }
+        guard kerr == KERN_SUCCESS else {
+            return nil
+        }
+        return Float(info.resident_size) / (1024 * 1024)
     }
     
 }
@@ -139,8 +184,8 @@ extension Brain {
     }
     
     fileprivate func updateInterfaceIfNeeded() {
-        if console.isOnScreen {
-            console.updateUI()
+        if console?.isOnScreen == true {
+            console?.updateUI()
         }
     }
     
@@ -218,12 +263,12 @@ extension Brain: UITableViewDataSource, UITableViewDelegate {
     internal func scrollViewDidEndDragging(_ scrollView: UIScrollView,
                                            willDecelerate decelerate: Bool) {
         if !decelerate {
-            console.currentOffsetX = scrollView.contentOffset.x
+            console?.currentOffsetX = scrollView.contentOffset.x
         }
     }
     
     internal func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-        console.currentOffsetX = scrollView.contentOffset.x
+        console?.currentOffsetX = scrollView.contentOffset.x
     }
     
 }

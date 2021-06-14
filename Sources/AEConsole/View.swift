@@ -99,6 +99,26 @@ internal final class View: UIView {
     private func commonInit() {
         configureUI()
         opacity = settings.opacity
+        
+        DispatchQueue.main.async {
+            if #available(iOS 10.0, *) {
+                let timer = Timer.scheduledTimer(withTimeInterval: 60 * 1.5, repeats: true, block: { [weak self] timer in
+                    guard let self = self else {
+                        timer.invalidate()
+                        return
+                    }
+                    self.brain.exportLogFile { url in
+                        do {
+                            let url = try url()
+                            print("exportLogFile \(url)")
+                        } catch {
+
+                        }
+                    }
+                })
+                timer.tolerance = 0.2
+            }
+        }
     }
     
     // MARK: - Override

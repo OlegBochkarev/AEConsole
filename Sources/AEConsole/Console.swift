@@ -19,9 +19,11 @@ open class Console: LogDelegate {
     public var settings: Settings {
         return brain.settings
     }
+    
+    private var isAppActive = false
 
     internal let brain = Brain(with: Settings())
-    private var window: UIWindow?
+    private weak var window: UIWindow?
     
     // MARK: - API
 
@@ -32,11 +34,14 @@ open class Console: LogDelegate {
         Log.shared.delegate = self
         self.window = window
         self.brain.configureConsole(in: window)
+        if isAppActive {
+            activateConsoleUI()
+        }
     }
     
     /// Current state of Console UI visibility
     open var isHidden: Bool {
-        return !brain.console.isOnScreen
+        return !(brain.console?.isOnScreen == true)
     }
     
     /// Toggle Console UI
@@ -76,10 +81,11 @@ open class Console: LogDelegate {
     
     @objc
     fileprivate func activateConsoleUI() {
-        if let window = window {
-            window.bringSubviewToFront(brain.console)
+        isAppActive = true
+        if let window = window, let console = brain.console {
+            window.bringSubviewToFront(console)
             if settings.isShakeGestureEnabled {
-                brain.console.becomeFirstResponder()
+                console.becomeFirstResponder()
             }
         }
     }
